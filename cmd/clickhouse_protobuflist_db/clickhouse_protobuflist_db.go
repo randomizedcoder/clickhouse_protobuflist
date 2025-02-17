@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"log"
@@ -11,8 +11,6 @@ import (
 
 	clickhouse "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/randomizedcoder/xtcp2/pkg/clickhouse_protolist"
-	"google.golang.org/protobuf/encoding/protodelim"
-	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -33,10 +31,12 @@ var (
 )
 
 type config struct {
-	envelope bool
-	db       bool
-	filename string
-	value    uint
+	envelope     bool
+	db           bool
+	filename     string
+	value        uint
+	debugDump    bool
+	dumpFilename string
 }
 
 func main() {
@@ -46,6 +46,9 @@ func main() {
 
 	envelope := flag.Bool("envelope", false, "envelope")
 	db := flag.Bool("db", false, "db")
+
+	dump := flag.Bool("dump", false, "dump proto for debug")
+	dumpFilename := flag.String("dumpFileName", "dump.bin", "dump file name")
 
 	v := flag.Bool("v", false, "show version")
 
@@ -58,10 +61,12 @@ func main() {
 	}
 
 	c := config{
-		filename: *filename,
-		value:    *value,
-		envelope: *envelope,
-		db:       *db,
+		filename:     *filename,
+		value:        *value,
+		envelope:     *envelope,
+		db:           *db,
+		debugDump:    *dump,
+		dumpFilename: *dumpFilename,
 	}
 
 	primaryFunction(c)
@@ -75,66 +80,40 @@ func primaryFunction(c config) {
 
 }
 
-// func prepareBinary(c config) (binaryData []byte) {
-
-// 	r := &clickhouse_protolist.Record{}
-// 	r.MyUint32 = uint32(c.value)
-
-// 	encodedData, err := encodeLengthDelimitedProtobufList(r)
-// 	if err != nil {
-// 		log.Println("Error encoding:", err)
-// 		return
-// 	}
-
-// 	if !c.envelope {
-// 		binaryData = encodedData
-// 		return binaryData
-// 	}
-
-// 	e := &clickhouse_protolist.Envelope{}
-// 	e.Rows = append(e.Rows, r)
-
-// 	encodedEnvelope, err := encodeLengthDelimitedEnvelope(encodedData)
-// 	if err != nil {
-// 		fmt.Println("Error encoding Envelope:", err)
-// 		return
-// 	}
-
-// 	binaryData = encodedEnvelope
-
-// 	return binaryData
-// }
-
 func prepareBinary(c config) (binaryData []byte) {
 
 	r := &clickhouse_protolist.Record{}
 	r.MyUint32 = uint32(c.value)
 
-	var buf bytes.Buffer
-	if _, err := protodelim.MarshalTo(&buf, r); err != nil {
-		log.Fatalf("Failed to encode protobuf: %v", err)
+	serializedData, err := proto.Marshal(r)
+	if err != nil {
+		log.Fatal("serializedData, err := proto.Marshal(r):", err)
 	}
-	encodedData := buf.Bytes()
+
+	buf := make([]byte, binary.MaxVarintLen64)
+	n := binary.PutUvarint(buf, uint64(len(serializedData)))
+
+	binaryData = make([]byte, 0, n+len(serializedData))
+	binaryData = append(binaryData, buf[:n]...)
+	binaryData = append(binaryData, serializedData...)
+
+	// 	[das@t:~/Downloads/xtcp2/cmd/clickhouse_protobuflist_db]$ hexdump -C ./fixed_output.bin
+	// 00000000  06 08 ff ff ff ff 0f                              |.......|
+	// 00000007
+	if c.debugDump {
+		errW := os.WriteFile(c.dumpFilename, binaryData, 0644)
+		if errW != nil {
+			log.Fatalf("Failed to write protobuf data: %v", errW)
+		}
+	}
 
 	if !c.envelope {
-		binaryData = encodedData
 		return binaryData
 	}
 
 	if c.envelope {
 		log.Fatal("evenope not implemented")
 	}
-
-	// e := &clickhouse_protolist.Envelope{}
-	// e.Rows = append(e.Rows, r)
-
-	// encodedEnvelope, err := encodeLengthDelimitedEnvelope(encodedData)
-	// if err != nil {
-	// 	fmt.Println("Error encoding Envelope:", err)
-	// 	return
-	// }
-
-	// binaryData = encodedEnvelope
 
 	return binaryData
 
@@ -155,37 +134,6 @@ func fileOrDB(c config, binaryData []byte) {
 		log.Println("Error:", errDB)
 	}
 
-}
-
-func encodeLengthDelimitedProtobufList(r *clickhouse_protolist.Record) (result []byte, err error) {
-
-	// for _, record := range e.Rows {
-	// 	recordBytes, err := proto.Marshal(record)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("error marshaling Record: %v", err)
-	// 	}
-
-	recordBytes, err := proto.Marshal(r)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling Record: %v", err)
-	}
-
-	log.Printf("AppendVarint of length:%d", len(recordBytes))
-	protowire.AppendVarint(result, uint64(len(recordBytes)))
-
-	result = append(result, recordBytes...)
-
-	// }
-
-	return result, nil
-}
-
-func encodeLengthDelimitedEnvelope(encodedData []byte) (result []byte, err error) {
-
-	result = append(result, protowire.AppendVarint(nil, uint64(len(encodedData)))...)
-	result = append(result, encodedData...)
-
-	return result, nil
 }
 
 func writeDataToFile(filename string, data []byte) error {
