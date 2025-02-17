@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -10,9 +11,13 @@ import (
 
 	clickhouse "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/randomizedcoder/xtcp2/pkg/clickhouse_protolist"
+	"google.golang.org/protobuf/encoding/protodelim"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
+
+//import "google.golang.org/protobuf/encoding/protowire"
+//import "google.golang.org/protobuf/encoding/protodelim"
 
 const (
 	clickhouseConnectString = "127.0.0.1:9001"
@@ -70,34 +75,69 @@ func primaryFunction(c config) {
 
 }
 
+// func prepareBinary(c config) (binaryData []byte) {
+
+// 	r := &clickhouse_protolist.Record{}
+// 	r.MyUint32 = uint32(c.value)
+
+// 	encodedData, err := encodeLengthDelimitedProtobufList(r)
+// 	if err != nil {
+// 		log.Println("Error encoding:", err)
+// 		return
+// 	}
+
+// 	if !c.envelope {
+// 		binaryData = encodedData
+// 		return binaryData
+// 	}
+
+// 	e := &clickhouse_protolist.Envelope{}
+// 	e.Rows = append(e.Rows, r)
+
+// 	encodedEnvelope, err := encodeLengthDelimitedEnvelope(encodedData)
+// 	if err != nil {
+// 		fmt.Println("Error encoding Envelope:", err)
+// 		return
+// 	}
+
+// 	binaryData = encodedEnvelope
+
+// 	return binaryData
+// }
+
 func prepareBinary(c config) (binaryData []byte) {
 
 	r := &clickhouse_protolist.Record{}
 	r.MyUint32 = uint32(c.value)
 
-	encodedData, err := encodeLengthDelimitedProtobufList(r)
-	if err != nil {
-		log.Println("Error encoding:", err)
-		return
+	var buf bytes.Buffer
+	if _, err := protodelim.MarshalTo(&buf, r); err != nil {
+		log.Fatalf("Failed to encode protobuf: %v", err)
 	}
+	encodedData := buf.Bytes()
 
 	if !c.envelope {
 		binaryData = encodedData
 		return binaryData
 	}
 
-	e := &clickhouse_protolist.Envelope{}
-	e.Rows = append(e.Rows, r)
-
-	encodedEnvelope, err := encodeLengthDelimitedEnvelope(encodedData)
-	if err != nil {
-		fmt.Println("Error encoding Envelope:", err)
-		return
+	if c.envelope {
+		log.Fatal("evenope not implemented")
 	}
 
-	binaryData = encodedEnvelope
+	// e := &clickhouse_protolist.Envelope{}
+	// e.Rows = append(e.Rows, r)
+
+	// encodedEnvelope, err := encodeLengthDelimitedEnvelope(encodedData)
+	// if err != nil {
+	// 	fmt.Println("Error encoding Envelope:", err)
+	// 	return
+	// }
+
+	// binaryData = encodedEnvelope
 
 	return binaryData
+
 }
 
 func fileOrDB(c config, binaryData []byte) {
