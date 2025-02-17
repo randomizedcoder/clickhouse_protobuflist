@@ -42,4 +42,10 @@ copy:
 	docker cp ./protoBytes.value1.envelope.bin xtcp-clickhouse-1:/
 	docker cp ./protoBytes.value4294967295.envelope.bin xtcp-clickhouse-1:/
 
+hex:
+	hexdump -C ./dump.bin
+# [das@t:~/Downloads/xtcp2/cmd/clickhouse_protobuflist_db]$ hexdump -C ./fixed_output.bin
+# 00000000  06 08 ff ff ff ff 0f                              |.......|
+# 00000007
+
 # end
