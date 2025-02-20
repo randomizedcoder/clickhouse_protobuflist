@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/binary"
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/randomizedcoder/xtcp2/pkg/clickhouse_protolist"
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/encoding/protodelim"
 )
 
 // 	clickhouse "github.com/ClickHouse/clickhouse-go/v2"
@@ -102,14 +102,20 @@ func primaryFunction(c config) {
 
 func prepareBinary(c config) (binaryData []byte) {
 
-	innerBinaryData := make([]byte, 0, binary.MaxVarintLen64*len(c.values))
+	var b bytes.Buffer
 
 	if !c.envelope {
-		for _, v := range c.values {
-			innerBinaryData = append(innerBinaryData, encodeRecord(v)...)
-			binaryData = innerBinaryData
-			return binaryData
+
+		r := &clickhouse_protolist.Record{
+			MyUint32: uint32(c.values[0]),
 		}
+
+		if _, err := protodelim.MarshalTo(&b, r); err != nil {
+			log.Fatal("protodelim.MarshalTo(r):", err)
+		}
+
+		binaryData = b.Bytes()
+		return binaryData
 	}
 
 	if c.envelope {
@@ -122,44 +128,37 @@ func prepareBinary(c config) (binaryData []byte) {
 			)
 		}
 
-		var err error
-		innerBinaryData, err = proto.Marshal(envelope)
-		if err != nil {
-			log.Fatal("proto.Marshal(envelope):", err)
+		if _, err := protodelim.MarshalTo(&b, envelope); err != nil {
+			log.Fatal("protodelim.MarshalTo(r):", err)
 		}
 
-		buf := make([]byte, binary.MaxVarintLen64)
-		n := binary.PutUvarint(buf, uint64(len(innerBinaryData)))
+		binaryData = b.Bytes()
 
-		binaryData = make([]byte, 0, n+len(innerBinaryData))
-		binaryData = append(binaryData, buf[:n]...)
-		binaryData = append(binaryData, innerBinaryData...)
-
-	}
-
-	if c.debugDump {
-		errW := os.WriteFile(c.dumpFilename+".envelope", binaryData, 0644)
-		if errW != nil {
-			log.Fatalf("Failed to write protobuf envelope data: %v", errW)
+		if c.debugDump {
+			errW := os.WriteFile(c.dumpFilename+".envelope", binaryData, 0644)
+			if errW != nil {
+				log.Fatalf("Failed to write protobuf envelope data: %v", errW)
+			}
 		}
+
 	}
 
 	return binaryData
 }
 
-func encodeRecord(value uint) []byte {
-	r := &clickhouse_protolist.Record{
-		MyUint32: uint32(value),
-	}
-	serializedData, err := proto.Marshal(r)
-	if err != nil {
-		log.Fatal("serializedData, err:= proto.Marshal(r):", err)
-	}
+// func encodeRecord(value uint) []byte {
+// 	r := &clickhouse_protolist.Record{
+// 		MyUint32: uint32(value),
+// 	}
+// 	serializedData, err := proto.Marshal(r)
+// 	if err != nil {
+// 		log.Fatal("serializedData, err:= proto.Marshal(r):", err)
+// 	}
 
-	buf := make([]byte, binary.MaxVarintLen64)
-	n := binary.PutUvarint(buf, uint64(len(serializedData)))
-	return append(buf[:n], serializedData...)
-}
+// 	buf := make([]byte, binary.MaxVarintLen64)
+// 	n := binary.PutUvarint(buf, uint64(len(serializedData)))
+// 	return append(buf[:n], serializedData...)
+// }
 
 func fileOrDB(c config, binaryData []byte) {
 
