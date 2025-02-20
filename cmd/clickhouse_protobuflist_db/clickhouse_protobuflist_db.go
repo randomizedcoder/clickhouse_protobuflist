@@ -1,26 +1,26 @@
 package main
 
 import (
-	"context"
 	"encoding/binary"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
-	clickhouse "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/randomizedcoder/xtcp2/pkg/clickhouse_protolist"
 	"google.golang.org/protobuf/proto"
 )
 
+// 	clickhouse "github.com/ClickHouse/clickhouse-go/v2"
 //import "google.golang.org/protobuf/encoding/protowire"
 //import "google.golang.org/protobuf/encoding/protodelim"
 
 const (
-	clickhouseConnectString = "127.0.0.1:9001"
-	clickhouseUser          = "dave"
-	clickhousePassword      = "dave"
+	clickhouseConnectStringCst = "127.0.0.1:19001"
+	clickhouseUserCst          = "dave"
+	clickhousePasswordCst      = "dave"
 )
 
 var (
@@ -33,8 +33,11 @@ var (
 type config struct {
 	envelope     bool
 	db           bool
+	connectStr   string
+	user         string
+	pass         string
 	filename     string
-	value        uint
+	values       []uint
 	debugDump    bool
 	dumpFilename string
 }
@@ -42,10 +45,14 @@ type config struct {
 func main() {
 
 	filename := flag.String("filename", "protoBytes.bin", "filename")
-	value := flag.Uint("value", 1, "value uint -> uint32")
+	valueStr := flag.String("values", "1", "values uints -> uint32, comma seperated")
 
 	envelope := flag.Bool("envelope", false, "envelope")
 	db := flag.Bool("db", false, "db")
+
+	connect := flag.String("connect", clickhouseConnectStringCst, "clickhouse database connect string")
+	user := flag.String("user", clickhouseUserCst, "clickhosue user")
+	pass := flag.String("pass", clickhousePasswordCst, "clickhosue pass")
 
 	dump := flag.Bool("dump", false, "dump proto for debug")
 	dumpFilename := flag.String("dumpFileName", "dump.bin", "dump file name")
@@ -60,11 +67,24 @@ func main() {
 		os.Exit(0)
 	}
 
+	valueStrs := strings.Split(*valueStr, ",")
+	var values []uint
+	for _, str := range valueStrs {
+		v, err := strconv.ParseUint(str, 10, 32)
+		if err != nil {
+			log.Fatalf("Invalid value: %v", err)
+		}
+		values = append(values, uint(v))
+	}
+
 	c := config{
 		filename:     *filename,
-		value:        *value,
+		values:       values,
 		envelope:     *envelope,
 		db:           *db,
+		connectStr:   *connect,
+		user:         *user,
+		pass:         *pass,
 		debugDump:    *dump,
 		dumpFilename: *dumpFilename,
 	}
@@ -82,41 +102,63 @@ func primaryFunction(c config) {
 
 func prepareBinary(c config) (binaryData []byte) {
 
-	r := &clickhouse_protolist.Record{}
-	r.MyUint32 = uint32(c.value)
+	innerBinaryData := make([]byte, 0, binary.MaxVarintLen64*len(c.values))
 
+	if !c.envelope {
+		for _, v := range c.values {
+			innerBinaryData = append(innerBinaryData, encodeRecord(v)...)
+			binaryData = innerBinaryData
+			return binaryData
+		}
+	}
+
+	if c.envelope {
+		envelope := &clickhouse_protolist.Envelope{}
+		for _, v := range c.values {
+			envelope.Rows = append(envelope.Rows,
+				&clickhouse_protolist.Record{
+					MyUint32: uint32(v),
+				},
+			)
+		}
+
+		var err error
+		innerBinaryData, err = proto.Marshal(envelope)
+		if err != nil {
+			log.Fatal("proto.Marshal(envelope):", err)
+		}
+
+		buf := make([]byte, binary.MaxVarintLen64)
+		n := binary.PutUvarint(buf, uint64(len(innerBinaryData)))
+
+		binaryData = make([]byte, 0, n+len(innerBinaryData))
+		binaryData = append(binaryData, buf[:n]...)
+		binaryData = append(binaryData, innerBinaryData...)
+
+	}
+
+	if c.debugDump {
+		errW := os.WriteFile(c.dumpFilename+".envelope", binaryData, 0644)
+		if errW != nil {
+			log.Fatalf("Failed to write protobuf envelope data: %v", errW)
+		}
+	}
+
+	return binaryData
+}
+
+func encodeRecord(value uint) []byte {
+	r := &clickhouse_protolist.Record{
+		MyUint32: uint32(value),
+	}
 	serializedData, err := proto.Marshal(r)
 	if err != nil {
-		log.Fatal("serializedData, err := proto.Marshal(r):", err)
+		log.Fatal("serializedData, err:= proto.Marshal(r):", err)
 	}
 
 	buf := make([]byte, binary.MaxVarintLen64)
 	n := binary.PutUvarint(buf, uint64(len(serializedData)))
-
-	binaryData = make([]byte, 0, n+len(serializedData))
-	binaryData = append(binaryData, buf[:n]...)
-	binaryData = append(binaryData, serializedData...)
-
-	// 	[das@t:~/Downloads/xtcp2/cmd/clickhouse_protobuflist_db]$ hexdump -C ./fixed_output.bin
-	// 00000000  06 08 ff ff ff ff 0f                              |.......|
-	// 00000007
-	if c.debugDump {
-		errW := os.WriteFile(c.dumpFilename, binaryData, 0644)
-		if errW != nil {
-			log.Fatalf("Failed to write protobuf data: %v", errW)
-		}
-	}
-
-	if !c.envelope {
-		return binaryData
-	}
-
-	if c.envelope {
-		log.Fatal("evenope not implemented")
-	}
-
-	return binaryData
-
+	return append(buf[:n], serializedData...)
 }
 
 func fileOrDB(c config, binaryData []byte) {
@@ -129,10 +171,14 @@ func fileOrDB(c config, binaryData []byte) {
 		os.Exit(0)
 	}
 
-	errDB := insertIntoCH(c, binaryData)
-	if errDB != nil {
-		log.Println("Error:", errDB)
+	if c.db {
+		log.Fatal("db not implemented, cos it's hard to insert protobuf with the clickhouse library")
 	}
+
+	// errDB := insertIntoCH(c, binaryData)
+	// if errDB != nil {
+	// 	log.Println("Error:", errDB)
+	// }
 
 }
 
@@ -146,54 +192,105 @@ func writeDataToFile(filename string, data []byte) error {
 
 }
 
-func insertIntoCH(c config, binaryData []byte) error {
+// func insertIntoCH(c config, binaryData []byte) error {
+// 	ctx := context.Background()
 
-	ctx := context.TODO()
+// 	// Connect using ch-go
+// 	conn, err := chproto.Dial(
+// 		ctx, c.connectStr,
+// 		chproto.WithCompression(chproto.CompressionZSTD),
+// 	)
+// 	if err != nil {
+// 		log.Fatalf("Failed to connect to ClickHouse: %v", err)
+// 	}
+// 	defer conn.Close()
 
-	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{clickhouseConnectString}, // Update with your ClickHouse address
-		Auth: clickhouse.Auth{
-			Database: "",
-			Username: clickhouseUser,
-			Password: clickhousePassword,
-		},
-		Debug: true,
-	})
-	if err != nil {
-		log.Fatalf("Failed to connect to ClickHouse: %v", err)
-	}
-	defer conn.Close()
+// 	// Determine the format based on the 'envelope' flag
+// 	format := chproto.FormatProtobuf
+// 	if c.envelope {
+// 		format = proto.FormatProtobufList
+// 	}
 
-	insertQuery := `
-INSERT INTO clickhouse_protolist.clickhouse_protolist (my_uint32)
-FORMAT Protobuf
-SETTINGS format_schema = '/var/lib/clickhouse/format_schemas/clickhouse_protolist.proto:clickhouse_protolist.v1.Record;
-`
+// 	// Insert the data
+// 	err = conn.Do(ctx, chproto.Query{
+// 		Body: binaryData, // Send the prepared binary data
+// 		OnInput: func(ctx context.Context) error {
+// 			return conn.Do(ctx, proto.Insert{
+// 				Table:  "clickhouse_protolist.clickhouse_protolist",
+// 				Format: format, // Use the appropriate format
+// 				Columns: string{
+// 					"my_uint32", // Assuming your column name is 'my_uint32'
+// 				},
+// 			})
+// 		},
+// 	})
+// 	if err != nil {
+// 		return fmt.Errorf("failed to insert data: %w", err)
+// 	}
 
-	if c.envelope {
-		insertQuery = strings.Replace(insertQuery, "FORMAT Protobuf", "FORMAT ProtobufList", 1)
-	}
+// 	return nil
+// }
 
-	insertQuery = strings.Replace(insertQuery, "\n", " ", -1)
+// func insertIntoCH(c config, binaryData []byte) error {
 
-	log.Printf("insertQuery:%s", insertQuery)
+// 	ctx := context.TODO()
 
-	// batch, err := conn.PrepareBatch(ctx, insertQuery)
-	// if err != nil {
-	// 	log.Fatalf("Failed to prepare batch: %v", err)
-	// }
+// 	conn, err := clickhouse.Open(&clickhouse.Options{
+// 		Addr: []string{c.connectStr}, // Update with your ClickHouse address
+// 		Auth: clickhouse.Auth{
+// 			Database: "",
+// 			Username: c.user,
+// 			Password: c.pass,
+// 		},
+// 		// https://pkg.go.dev/github.com/ClickHouse/clickhouse-go/v2@v2.32.0#pkg-constants
+// 		// https://github.com/ClickHouse/clickhouse-go?tab=readme-ov-file#clickhouse-interface-formally-native-interface
+// 		Compression: &clickhouse.Compression{
+// 			Method: clickhouse.CompressionZSTD,
+// 		},
+// 		Debug: true,
+// 	})
+// 	if err != nil {
+// 		log.Fatalf("Failed to connect to ClickHouse: %v", err)
+// 	}
+// 	defer conn.Close()
 
-	// if err := batch.Append(binaryData); err != nil {
-	// 	log.Fatalf("Failed to append data: %v", err)
-	// }
+// 	insertQuery := `
+// INSERT INTO clickhouse_protolist.clickhouse_protolist
+// SETTINGS format_schema = 'clickhouse_protolist.proto:Record'
+// `
+// 	//SETTINGS format_schema = '/var/lib/clickhouse/format_schemas/clickhouse_protolist.proto:Record;
+// 	//SETTINGS format_schema = '/var/lib/clickhouse/format_schemas/clickhouse_protolist.proto:clickhouse_protolist.v1.Record;
 
-	// if err := batch.Send(); err != nil {
-	// 	log.Fatalf("Failed to send batch: %v", err)
-	// }
-	err = conn.Exec(ctx, insertQuery, binaryData)
-	if err != nil {
-		log.Fatalf("Failed to execute Protobuf insert: %v", err)
-	}
+// 	format := "FORMAT Protobuf"
+// 	if c.envelope {
+// 		format = "FORMAT ProtobufList"
+// 	}
 
-	return nil
-}
+// 	insertQuery = insertQuery + format
+
+// 	log.Printf("insertQuery:%s", insertQuery)
+
+// 	ctxT, cancel := context.WithTimeout(ctx, 5*time.Second)
+// 	defer cancel()
+
+// 	start := time.Now()
+// 	// if err := conn.Exec(ctxT, insertQuery, binaryData); err != nil {
+// 	// 	log.Fatalf("Failed to insert Protobuf data: %v", err)
+// 	// }
+
+// 	batch, err := conn.PrepareBatch(ctxT, insertQuery)
+// 	if err != nil {
+// 		log.Fatalf("Failed to prepare batch: %v", err)
+// 	}
+
+// 	if err := batch.Append(binaryData); err != nil {
+// 		log.Fatalf("Failed to append Protobuf data: %v", err)
+// 	}
+// 	if err := batch.Send(); err != nil {
+// 		log.Fatalf("Failed to send batch: %v", err)
+// 	}
+
+// 	log.Printf("insertQuery complete, after:%0.3fs", time.Since(start).Seconds())
+
+// 	return nil
+// }

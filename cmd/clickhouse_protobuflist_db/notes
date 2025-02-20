@@ -1,0 +1,110 @@
+SELECT *
+FROM clickhouse_protolist.clickhouse_protolist
+INTO OUTFILE 'clickhouse_protolist.proto.insert1.protolist.bin2025_01_20_0740'
+FORMAT ProtobufList
+SETTINGS format_schema = '/var/lib/clickhouse/format_schemas/clickhouse_protolist.proto:clickhouse_protolist.v1.Record'
+
+
+9389291ff655 :) SELECT *
+FROM clickhouse_protolist.clickhouse_protolist
+INTO OUTFILE 'clickhouse_protolist.proto.insert1.protolist.bin2025_01_20_0740'
+FORMAT ProtobufList
+SETTINGS format_schema = '/var/lib/clickhouse/format_schemas/clickhouse_protolist.proto:clickhouse_protolist.v1.Record'
+
+SELECT *
+FROM clickhouse_protolist.clickhouse_protolist
+INTO OUTFILE 'clickhouse_protolist.proto.insert1.protolist.bin2025_01_20_0740'
+FORMAT ProtobufList
+SETTINGS format_schema = '/var/lib/clickhouse/format_schemas/clickhouse_protolist.proto:clickhouse_protolist.v1.Record'
+
+Query id: 1ebfdb77-1587-4653-bba7-e5ac8ac157aa
+
+
+1 row in set. Elapsed: 0.001 sec.
+
+TRUNCATE TABLE clickhouse_protolist.clickhouse_protolist;
+
+INSERT INTO clickhouse_protolist.clickhouse_protolist VALUES (4294967295);
+
+
+SELECT *
+FROM clickhouse_protolist.clickhouse_protolist
+INTO OUTFILE 'clickhouse_protolist.proto.insert4294967295.protolist.bin2025_01_20_0740'
+FORMAT ProtobufList
+SETTINGS format_schema = '/var/lib/clickhouse/format_schemas/clickhouse_protolist.proto:clickhouse_protolist.v1.Record'
+
+
+INSERT INTO clickhouse_protolist.clickhouse_protolist VALUES (1);
+
+SELECT *
+FROM clickhouse_protolist.clickhouse_protolist
+INTO OUTFILE 'clickhouse_protolist.proto.insert4294967295and1.protolist.bin2025_01_20_0740'
+FORMAT ProtobufList
+SETTINGS format_schema = '/var/lib/clickhouse/format_schemas/clickhouse_protolist.proto:clickhouse_protolist.v1.Record'
+
+
+INSERT INTO clickhouse_protolist.clickhouse_protolist VALUES (10);
+
+SELECT *
+FROM clickhouse_protolist.clickhouse_protolist
+INTO OUTFILE 'clickhouse_protolist.proto.insert4294967295and1and10.protolist.bin2025_01_20_0740'
+FORMAT ProtobufList
+SETTINGS format_schema = '/var/lib/clickhouse/format_schemas/clickhouse_protolist.proto:clickhouse_protolist.v1.Record'
+
+SELECT *
+FROM clickhouse_protolist.clickhouse_protolist
+ORDER BY my_uint32 ASC
+
+SELECT *
+FROM clickhouse_protolist.clickhouse_protolist
+ORDER BY my_uint32 ASC
+INTO OUTFILE 'clickhouse_protolist.proto.insert1and4294967295.protolist.bin2025_01_20_1220'
+FORMAT ProtobufList
+SETTINGS format_schema = '/var/lib/clickhouse/format_schemas/clickhouse_protolist.proto:clickhouse_protolist.v1.Record'
+
+
+INSERT INTO clickhouse_protolist.clickhouse_protolist VALUES (10);
+
+
+9389291ff655 :) SELECT *
+FROM clickhouse_protolist.clickhouse_protolist
+ORDER BY my_uint32 ASC
+
+SELECT *
+FROM clickhouse_protolist.clickhouse_protolist
+ORDER BY my_uint32 ASC
+
+Query id: e2bf4c10-4b8f-486e-9944-da420144d477
+
+   ┌─my_uint32─┐
+1. │         1 │
+   └───────────┘
+   ┌─my_uint32─┐
+2. │        10 │
+   └───────────┘
+   ┌──my_uint32─┐
+3. │ 4294967295 │ -- 4.29 billion
+   └────────────┘
+
+3 rows in set. Elapsed: 0.004 sec.
+
+9389291ff655 :) SELECT *
+FROM clickhouse_protolist.clickhouse_protolist
+ORDER BY my_uint32 ASC
+INTO OUTFILE 'clickhouse_protolist.proto.insert1and10and4294967295.protolist.bin2025_01_20_1435'
+FORMAT ProtobufList
+SETTINGS format_schema = '/var/lib/clickhouse/format_schemas/clickhouse_protolist.proto:clickhouse_protolist.v1.Record'
+
+SELECT *
+FROM clickhouse_protolist.clickhouse_protolist
+ORDER BY my_uint32 ASC
+INTO OUTFILE 'clickhouse_protolist.proto.insert1and10and4294967295.protolist.bin2025_01_20_1435'
+FORMAT ProtobufList
+SETTINGS format_schema = '/var/lib/clickhouse/format_schemas/clickhouse_protolist.proto:clickhouse_protolist.v1.Record'
+
+Query id: c861bc1e-e047-4abb-82b4-1408dac81031
+
+
+3 rows in set. Elapsed: 0.002 sec.
+
+
