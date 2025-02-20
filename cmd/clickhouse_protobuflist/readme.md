@@ -5,6 +5,8 @@
 
 After having challenges understanding protobuf list, I hoped a ticket and Clickhouse kindly responded.
 
+This little bit of code was used for testing.
+
 ## Issue
 https://github.com/ClickHouse/clickhouse-docs/issues/3128#issuecomment-2646560751
 
